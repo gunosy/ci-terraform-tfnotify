@@ -1,4 +1,9 @@
 ARG TF_VERSION
+
+# eMudhra の中間 CA 侵害対応: 侵害された中間 CA を発行したルート（emSign・AAA Certificate Services）を含まない CA 一覧を用意する
+FROM alpine:3.22 AS ca-certificates
+RUN apk add --no-cache 'ca-certificates>=20261020-r0'
+
 FROM hashicorp/terraform:${TF_VERSION}
 
 ARG TFNOTIFY_VERSION
@@ -32,3 +37,11 @@ RUN    apk --upgrade --no-cache add curl && apk add --upgrade --no-cache --virtu
         fi \
     && rm -rf /tmp/* \
     && apk del --purge .build-deps
+
+# ベースの alpine の CA 一覧は古く、emSign・AAA Certificate Services のルートを含むため、上の CA 一覧に置き換える
+RUN rm -rf /etc/ssl/certs /usr/share/ca-certificates /etc/ssl/cert.pem
+COPY --from=ca-certificates /etc/ssl/certs /etc/ssl/certs
+COPY --from=ca-certificates /usr/share/ca-certificates /usr/share/ca-certificates
+RUN ln -s certs/ca-certificates.crt /etc/ssl/cert.pem
+# AWS CLI は自前の CA 一覧を持つため、システムの CA 一覧を使わせる
+ENV AWS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
